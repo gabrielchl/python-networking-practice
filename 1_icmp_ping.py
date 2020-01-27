@@ -10,6 +10,7 @@ import select
 import binascii
 import atexit
 import statistics
+import argparse
 
 ICMP_ECHO_REQUEST = 8 #ICMP type code for echo request messages
 ICMP_ECHO_REPLY = 0 #ICMP type code for echo reply messages
@@ -19,6 +20,20 @@ host = ''
 send_count = 0
 receive_count = 0
 times = []
+
+parser = argparse.ArgumentParser(description='Send ICMP ECHO_REQUEST to network hosts')
+
+parser.add_argument('destination', type=str)
+parser.add_argument('-c', '--count', type=int, help='Stop after sending count ECHO_REQUEST packets. With deadline option, ping waits for count ECHO_REPLY packets, until the timeout expires.')
+parser.add_argument('-i', '--interval', type=float, default=1, help='Wait interval seconds between sending each packet. The default is to wait for one second between each packet normally. Hack this script to set interval to values less than 0.2 seconds.')
+parser.add_argument('-t', '--timeout', type=float, default=1, help='Time to wait for a response, in seconds.')
+parser.add_argument('-q', action='store_true', help='Quiet output. Nothing is displayed except the summary lines at startup time and when finished.')
+
+args = parser.parse_args()
+
+if args.interval < 0.2:
+	print('ping: cannot flood; minimal interval allowed for user is 200ms')
+	quit()
 
 def checksum(string):
 	csum = 0
@@ -46,12 +61,6 @@ def checksum(string):
 	return answer
 
 def receive_one_ping(icmp_socket, destination_address, ID, timeout):
-	# 1. Wait for the socket to receive a reply
-	# 2. Once received, record time of receipt, otherwise, handle a timeout
-	# 3. Compare the time of receipt to time of sending, producing the total network delay
-	# 4. Unpack the packet header for useful information, including the ID
-	# 5. Check that the ID matches between the request and reply
-	# 6. Return total network delay
 	value_or_timeout = select.select([icmp_socket], [], [], timeout)
 	if value_or_timeout[0] == []:
 		return
@@ -67,11 +76,6 @@ def receive_one_ping(icmp_socket, destination_address, ID, timeout):
 	return (receive_time, ttl, receive_seq_num, data_size)
 
 def send_one_ping(icmp_socket, destination_address, ID, count):
-	# 1. Build ICMP header
-	# 2. Checksum ICMP packet using given function
-	# 3. Insert checksum into packet
-	# 4. Send packet using socket
-	# 5. Record time of sending
 	icmp_socket.connect(destination_address)
 	header = struct.pack('bbHHH', ICMP_ECHO_REQUEST, 0, 0, ID, count)
 	data = struct.pack('8s', b'abcdefgh')
@@ -83,24 +87,19 @@ def send_one_ping(icmp_socket, destination_address, ID, count):
 
 def do_one_ping(destination_address, count, timeout):
 	icmp_socket = socket.socket(type=socket.SOCK_RAW, proto=socket.getprotobyname('icmp'))
-	send_time = send_one_ping(icmp_socket, destination_address, 0, count)
-	receive_result = receive_one_ping(icmp_socket, destination_address, 0, timeout)
+	send_time = send_one_ping(icmp_socket, destination_address, 64, count)
+	receive_result = receive_one_ping(icmp_socket, destination_address, 64, timeout)
+	icmp_socket.close()
 	if receive_result == None:
 		return None
 	else:
 		receive_time, ttl, receive_seq_num, data_size = receive_result
 		return (receive_time - send_time, ttl, receive_seq_num, data_size)
-	# 1. Create ICMP socket
-	# 2. Call sendOnePing function
-	# 3. Call receiveOnePing function
-	# 4. Close ICMP socket
-	# 5. Return total network delay
-	pass # Remove/replace when function is complete
 
 def exit():
 	if send_count == 0:
 		return
-	print(f'--- {host} ping statistics ---')
+	print(f'\n--- {host} ping statistics ---')
 	print(f'{send_count} packets transmitted, {receive_count} received, {(send_count - receive_count) / send_count * 100:.0f}% packet loss')
 	if len(times) < 2:
 		stdev = 0
@@ -109,23 +108,30 @@ def exit():
 	print(f'rtt min/avg/max/mdev = {min(times):.3f}/{sum(times) / len(times):.3f}/{max(times):.3f}/{stdev:.3f} ms')
 
 def ping(host_input, timeout=1):
-	# 1. Look up hostname, resolving it to an IP address
-	# 2. Call doOnePing function, approximately every second
-	# 3. Print out the returned delay
-	# 4. Continue this process until stopped
-	addr_info = socket.getaddrinfo(host, 80)[0][4]
+	try:
+		addr_info = socket.getaddrinfo(host, 80)[0][4]
+	except socket.gaierror:
+		print(f'ping: {host}: Name or service not known')
+		quit()
 	print(f'PING {host} ({addr_info[0]}) 8({8 + IP_HEADER_SIZE}) bytes of data.')
 	atexit.register(exit)
-	for i in range(10):
-		time.sleep(1)
-		ping_result = do_one_ping(addr_info, i + 1, timeout)
-		if ping_result == None:
-			print('Request timed out.')
-		else:
-			delay, ttl, receive_seq_num, data_size = ping_result
-			times.append(delay)
-			print(f'{data_size} bytes from {socket.gethostbyaddr(addr_info[0])[0]} ({addr_info[0]}): icmp_seq={receive_seq_num} ttl={ttl} time={delay * 1000:.2f} ms')
-	pass # Remove/replace when function is complete
+	global send_count
+	while True:
+		try:
+			time.sleep(args.interval)
+			ping_result = do_one_ping(addr_info, send_count + 1, args.timeout)
+			if ping_result == None:
+				if not args.q:
+					print('Request timed out.')
+			else:
+				delay, ttl, receive_seq_num, data_size = ping_result
+				times.append(delay)
+				if not args.q:
+					print(f'{data_size} bytes from {socket.gethostbyaddr(addr_info[0])[0]} ({addr_info[0]}): icmp_seq={receive_seq_num} ttl={ttl} time={delay * 1000:.2f} ms')
+			if args.count != None and send_count >= args.count:
+					break
+		except KeyboardInterrupt:
+			break
 
-host = 'lancaster.ac.uk'
+host = args.destination
 ping(host)
