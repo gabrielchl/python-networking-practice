@@ -13,22 +13,17 @@ IP_HEADER_SIZE = 28
 
 host = ''
 send_count = 0
-receive_count = 0
 times = []
 
-parser = argparse.ArgumentParser(description='Send ICMP ECHO_REQUEST to network hosts')
+parser = argparse.ArgumentParser(description='Print the route packets trace to network host')
 
 parser.add_argument('destination', type=str)
-parser.add_argument('-c', '--count', type=int, help='Stop after sending count ECHO_REQUEST packets. With deadline option, ping waits for count ECHO_REPLY packets, until the timeout expires.')
-parser.add_argument('-i', '--interval', type=float, default=1, help='Wait interval seconds between sending each packet. The default is to wait for one second between each packet normally. Hack this script to set interval to values less than 0.2 seconds.')
+parser.add_argument('-m', '--max-hops', type=int, default=30, help='Specifies the maximum number of hops (max time-to-live value) traceroute will probe. The default is 30.')
+parser.add_argument('-z', '--sendwait', type=float, default=0, help='Minimal time interval between probes (default 0). Useful when some routers use rate-limit for ICMP messages.')
+parser.add_argument('-q', '--queries', type=int, default=3, help='Sets the number of probe packets per hop. The default is 3')
 parser.add_argument('-t', '--timeout', type=float, default=1, help='Time to wait for a response, in seconds.')
-parser.add_argument('-q', action='store_true', help='Quiet output. Nothing is displayed except the summary lines at startup time and when finished.')
 
 args = parser.parse_args()
-
-if args.interval < 0.2:
-	print('ping: cannot flood; minimal interval allowed for user is 200ms')
-	quit()
 
 
 def checksum(string):
@@ -62,8 +57,6 @@ def receive_one_ping(icmp_socket, destination_address, ID, timeout):
 	if value_or_timeout[0] == []:
 		return
 	received, source_addr = icmp_socket.recvfrom(4096)
-	global receive_count
-	receive_count += 1
 	receive_time = time.time()
 	# ttl = received[8]
 	# type, code, checksum_value, id, receive_seq_num = struct.unpack('bbHHH', received[20:28])
@@ -77,8 +70,6 @@ def send_one_ping(icmp_socket, destination_address, ID, count):
 	data = struct.pack('8s', b'abcdefgh')
 	checksum_result = checksum(header + data)
 	icmp_socket.sendto(struct.pack('bbHHH', ICMP_ECHO_REQUEST, 0, checksum_result, ID, count) + data, destination_address)
-	global send_count
-	send_count += 1
 	return time.time()
 
 
@@ -100,34 +91,37 @@ def ping(host_input, timeout=1):
 	except socket.gaierror:
 		print(f'ping: {host}: Name or service not known')
 		quit()
-	print(f'PING {host} ({addr_info[0]}) 8({8 + IP_HEADER_SIZE}) bytes of data.')
+	print(f'traceroute to {host} ({addr_info[0]}) 8({8 + IP_HEADER_SIZE}) bytes of data, {args.max_hops} hopes max.')
 	global send_count
 	while True:
 		try:
-			time.sleep(args.interval)
+			time.sleep(args.sendwait)
 			times.clear()
-			for i in range(3):
-				ping_result = do_one_ping(addr_info, send_count // 3 + 1, args.timeout)
+			send_count += 1
+			if send_count > args.max_hops:
+				break
+			for i in range(args.queries):
+				ping_result = do_one_ping(addr_info, send_count, args.timeout)
 				if ping_result is None:
-					if not args.q:
-						print(f'{send_count // 3:>2}  * * *')
-						send_count += 2
-						break
+					print(f'{send_count:>2}  * * *')
+					break
 				else:
 					delay, source_addr = ping_result
 					times.append(delay)
+			if ping_result is None:
+				continue
 			else:
 				delay, source_addr = ping_result
-				if not args.q:
-					try:
-						hostname = socket.gethostbyaddr(source_addr)[0]
-					except socket.herror:
-						hostname = source_addr
-					print(f'{send_count // 3:>2}  {hostname} ({source_addr})  {times[0] * 1000:.03f} ms  {times[1] * 1000:.03f} ms  {times[2] * 1000:.03f} ms')
+				try:
+					hostname = socket.gethostbyaddr(source_addr)[0]
+				except socket.herror:
+					hostname = source_addr
+				times_string = ''
+				for i in range(args.queries):
+					times_string += f'  {times[i] * 1000:.3f} ms'
+				print(f'{send_count:>2}  {hostname} ({source_addr})' + times_string)
 				if addr_info[0] == source_addr:
 					break
-			if args.count is not None and send_count >= args.count:
-				break
 		except KeyboardInterrupt:
 			print('\n')
 			break
