@@ -86,7 +86,11 @@ def send_one_ping(icmp_socket, destination_address, ID, count):
 
 
 def do_one_ping(destination_address, count, timeout):
-	icmp_socket = socket.socket(type=socket.SOCK_RAW, proto=socket.getprotobyname('icmp'))
+	try:
+		icmp_socket = socket.socket(type=socket.SOCK_RAW, proto=socket.getprotobyname('icmp'))
+	except PermissionError:
+		print('Permission Error. Please run script as super user.')
+		quit()
 	send_time = send_one_ping(icmp_socket, destination_address, 64, count)
 	receive_result = receive_one_ping(icmp_socket, destination_address, 64, timeout)
 	icmp_socket.close()
@@ -109,7 +113,7 @@ def exit():
 	print(f'rtt min/avg/max/mdev = {min(times):.3f}/{sum(times) / len(times):.3f}/{max(times):.3f}/{stdev:.3f} ms')
 
 
-def ping(host_input, timeout=1):
+def ping(host_input):
 	try:
 		addr_info = socket.getaddrinfo(host, 80)[0][4]
 	except socket.gaierror:
