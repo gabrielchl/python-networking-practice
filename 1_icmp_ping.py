@@ -131,7 +131,7 @@ def ping(host_input):
 					print('Request timed out.')
 			else:
 				delay, ttl, receive_seq_num, data_size = ping_result
-				times.append(delay)
+				times.append(delay * 1000)
 				if not args.q:
 					print(f'{data_size} bytes from {socket.gethostbyaddr(addr_info[0])[0]} ({addr_info[0]}): icmp_seq={receive_seq_num} ttl={ttl} time={delay * 1000:.2f} ms')
 			if args.count is not None and send_count >= args.count:
