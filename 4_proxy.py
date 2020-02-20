@@ -37,13 +37,13 @@ def send_request(target_socket, dest, request_data):
 def get_reply(target_socket):
 	# retrieve first 1024 bytes
 	received_header, _ = target_socket.recvfrom(1024)
-	received_header_structured = str(received_header, 'ascii').splitlines()
+	received_header_structured = received_header.split(b'\r\n')
 
 	# get content length
-	content_length = 1024
+	content_length = 0
 	for line in received_header_structured:
-		line = line.split(': ')
-		if line[0].lower() == 'content-length':
+		line = line.split(b': ')
+		if line[0].lower() == b'content-length':
 			content_length = int(line[1])
 
 	# determine if we need to get more bytes
@@ -57,8 +57,8 @@ def get_reply(target_socket):
 
 def handle_request(request, client_address, server):
 	request_data = request.recv(2048)
-	request_structured = str(request_data, 'ascii').splitlines()
-	method, target, http_version = request_structured[0].split(' ')
+	request_structured = request_data.split(b'\r\n')
+	method, target, http_version = request_structured[0].split(b' ')
 	print(f'{method} {target}')
 
 	# attempt to retrieve webpage from cache
@@ -69,7 +69,7 @@ def handle_request(request, client_address, server):
 		return
 
 	# create socket to server
-	dest = request_structured[1].split(' ')[1]
+	dest = request_structured[1].split(b' ')[1]
 	target_socket = socket.socket(type=socket.SOCK_STREAM)
 	target_socket.settimeout(5)
 	target_socket.connect((dest, 80))
