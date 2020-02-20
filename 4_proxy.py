@@ -5,7 +5,10 @@ import socket
 import socketserver
 import atexit
 import argparse
+import sys
+import select
 import struct
+import threading
 
 def string_to_bool(input):
 	return input.lower() in ['yes', 'y', 'ya', 'yup', 'hellya', 'sure', 'true', 't', 1]
@@ -106,6 +109,17 @@ def start_server(server_address, server_port):
 	server.serve_forever()
 	return
 
+
+def monitor_input():
+	while True:
+		command = input()
+		if command.lower() == 'cache-list':
+			for url, _ in cache.items():
+				print(str(url, 'ascii'))
+
+
+input_thread = threading.Thread(target=monitor_input)
+input_thread.start()
 
 atexit.register(exit)
 start_server('', args.port)

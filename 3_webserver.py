@@ -44,16 +44,16 @@ def create_html(title, content):
 def handle_request(request, client_address, server):
 	try:
 		request_data = request.recv(2048)
-		request_structured = str(request_data, 'ascii').splitlines()
-		method, target, http_version = request_structured[0].split(' ')
+		request_structured = request_data.split(b'\r\n')
+		method, target, http_version = request_structured[0].split(b' ')
 		print(f'{method} {target}')
-		if http_version != 'HTTP/1.1':
+		if http_version != b'HTTP/1.1':
 			request.send(HTTP_VERSION + STATUS_CODES[505] + HEADER_TAIL + str.encode(create_html('505 HTTP Version not supported', f'<h1>HTTP Version not supported</h1>The server does not support your HTTP version and was unable to complete your request.')))
 			print(505)
 			return
-		if method == 'GET':
-			if target == '/':
-				target = '/index.html'
+		if method == b'GET':
+			if target == b'/':
+				target = b'/index.html'
 			try:
 				f = open(target[1:], 'r')
 				request.send(HTTP_VERSION + b' ' + STATUS_CODES[200] + HEADER_TAIL + str.encode(f.read()))
