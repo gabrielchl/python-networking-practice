@@ -4,6 +4,7 @@
 import socketserver
 import atexit
 import argparse
+import traceback
 
 parser = argparse.ArgumentParser(description='A python webserver')
 parser.add_argument('-p', '--port', type=int, default=8963, help='Specifies the port for the server to bind to. The default is 8963.')
@@ -29,6 +30,7 @@ HEADER_TAIL = b'\r\n\r\n'
 def exit():
 	server.server_close()
 	server.socket.close()
+	print('\ngood bye :)')
 
 
 def create_html(title, content):
@@ -67,16 +69,20 @@ def handle_request(request, client_address, server):
 					request.send(HTTP_VERSION + b' ' + STATUS_CODES[404] + HEADER_TAIL + str.encode(create_html('404 Not Found', f'<h1>Not Found</h1>The requested URL {target} was not found on this server')))
 					print(400)
 	except Exception:
+		traceback.print_exc()
 		request.send(HTTP_VERSION + b' ' + STATUS_CODES[500] + HEADER_TAIL + str.encode(create_html('500 Internal Server Error', f'<h1>Internal Server Error</h1>The server encountered an internal error or misconfiguration and was unable to complete your request.')))
 		print(500)
 
 
 def start_server(server_address, server_port):
 	global server
-	server = socketserver.TCPServer((server_address, server_port), handle_request)
-	ip, port = server.server_address
-	print(f'{ip}:{port}')
-	server.serve_forever()
+	try:
+		server = socketserver.TCPServer((server_address, server_port), handle_request)
+		ip, port = server.server_address
+		print(f'{ip}:{port}')
+		server.serve_forever()
+	except KeyboardInterrupt:
+		quit()
 
 
 atexit.register(exit)
