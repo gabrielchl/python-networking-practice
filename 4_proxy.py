@@ -5,13 +5,11 @@ import socket
 import socketserver
 import atexit
 import argparse
-import sys
-import select
-import struct
 import threading
 
+
 def string_to_bool(input):
-	return input.lower() in ['yes', 'y', 'ya', 'yup', 'hellya', 'sure', 'true', 't', 1]
+	return input.lower() in ['yes', 'y', 'ya', 'yup', 'hellya', 'yipee', 'woohoo', 'sure', 'true', 't', 1]
 
 
 parser = argparse.ArgumentParser(description='A python webserver')
@@ -27,9 +25,12 @@ cache = {}
 
 
 def exit():
+	if server is not None:
+		server.shutdown()
+		server.server_close()
+		server.socket.close()
+	print('\ngood bye :)')
 	return
-	# server.server_close()
-	# server.socket.close()
 
 
 def send_request(target_socket, dest, request_data):
@@ -48,6 +49,9 @@ def get_reply(target_socket):
 		line = line.split(b': ')
 		if line[0].lower() == b'content-length':
 			content_length = int(line[1])
+
+	print(len(received_header.split(b'\r\n\r\n', 1)[0]))
+	print(content_length)
 
 	# determine if we need to get more bytes
 	header_length = len(received_header.split(b'\r\n\r\n', 1)[0])
@@ -97,7 +101,7 @@ def handle_request(request, client_address, server):
 
 def start_server(server_address, server_port):
 	global server
-	while server == None:
+	while server is None:
 		try:
 			server = socketserver.TCPServer((server_address, server_port), handle_request)
 		except OSError as e:

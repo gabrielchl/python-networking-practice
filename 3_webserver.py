@@ -27,10 +27,17 @@ STATUS_CODES = {
 HEADER_TAIL = b'\r\n\r\n'
 
 
+def http_header(status_code):
+	return HTTP_VERSION + STATUS_CODES[status_code] + HEADER_TAIL
+
+
 def exit():
-	server.server_close()
-	server.socket.close()
+	if server is not None:
+		server.shutdown()
+		server.server_close()
+		server.socket.close()
 	print('\ngood bye :)')
+	return
 
 
 def create_html(title, content):
@@ -48,7 +55,7 @@ def handle_request(request, client_address, server):
 		method, target, http_version = request_structured[0].split(b' ')
 		print(f'{method} {target}')
 		if http_version != b'HTTP/1.1':
-			request.send(HTTP_VERSION + STATUS_CODES[505] + HEADER_TAIL + str.encode(create_html('505 HTTP Version not supported', f'<h1>HTTP Version not supported</h1>The server does not support your HTTP version and was unable to complete your request.')))
+			request.send(http_header(505) + str.encode(create_html('505 HTTP Version not supported', f'<h1>HTTP Version not supported</h1>The server does not support your HTTP version and was unable to complete your request.')))
 			print(505)
 			return
 		if method == b'GET':
@@ -56,31 +63,38 @@ def handle_request(request, client_address, server):
 				target = b'/index.html'
 			try:
 				f = open(target[1:], 'r')
-				request.send(HTTP_VERSION + b' ' + STATUS_CODES[200] + HEADER_TAIL + str.encode(f.read()))
+				request.send(http_header(200) + str.encode(f.read()))
 				print(200)
 				f.close()
 			except FileNotFoundError:
 				try:
 					f = open('404.html', 'r')
-					request.send(HTTP_VERSION + b' ' + STATUS_CODES[404] + HEADER_TAIL + str.encode(f.read()))
+					request.send(http_header(404) + str.encode(f.read()))
 					print(400)
 					f.close()
 				except FileNotFoundError:
-					request.send(HTTP_VERSION + b' ' + STATUS_CODES[404] + HEADER_TAIL + str.encode(create_html('404 Not Found', f'<h1>Not Found</h1>The requested URL {target} was not found on this server')))
+					target_str = str(target, 'ascii')
+					request.send(http_header(404) + str.encode(create_html('404 Not Found', f'<h1>Not Found</h1>The requested URL {target_str} was not found on this server')))
 					print(400)
 	except Exception:
 		traceback.print_exc()
-		request.send(HTTP_VERSION + b' ' + STATUS_CODES[500] + HEADER_TAIL + str.encode(create_html('500 Internal Server Error', f'<h1>Internal Server Error</h1>The server encountered an internal error or misconfiguration and was unable to complete your request.')))
+		request.send(http_header(500) + str.encode(create_html('500 Internal Server Error', f'<h1>Internal Server Error</h1>The server encountered an internal error or misconfiguration and was unable to complete your request.')))
 		print(500)
 
 
 def start_server(server_address, server_port):
 	global server
 	try:
-		server = socketserver.TCPServer((server_address, server_port), handle_request)
-		ip, port = server.server_address
-		print(f'{ip}:{port}')
-		server.serve_forever()
+		while server is None:
+			try:
+				server = socketserver.TCPServer((server_address, server_port), handle_request)
+				ip, port = server.server_address
+				print(f'{ip}:{port}')
+				server.serve_forever()
+			except OSError as e:
+				if e.errno == 98:
+					print(f'port {server_port} occupied, attempting to bind server to port {server_port + 1}')
+					server_port += 1
 	except KeyboardInterrupt:
 		quit()
 
