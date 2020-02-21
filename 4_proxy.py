@@ -49,9 +49,8 @@ def get_reply(target_socket):
 		line = line.split(b': ')
 		if line[0].lower() == b'content-length':
 			content_length = int(line[1])
-
-	print(len(received_header.split(b'\r\n\r\n', 1)[0]))
-	print(content_length)
+	if content_length == 0 and args.verbal:
+		print('content-length field does not exist in http header')
 
 	# determine if we need to get more bytes
 	header_length = len(received_header.split(b'\r\n\r\n', 1)[0])
@@ -66,7 +65,8 @@ def handle_request(request, client_address, server):
 	request_data = request.recv(2048)
 	request_structured = request_data.split(b'\r\n')
 	method, target, http_version = request_structured[0].split(b' ')
-	print(f'{method} {target}')
+	if args.verbal:
+		print(f'{str(method, "ascii")} {str(target, "ascii")}')
 
 	# attempt to retrieve webpage from cache
 	if target in cache and args.cache:
